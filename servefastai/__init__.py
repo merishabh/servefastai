@@ -1,46 +1,119 @@
-from flask import Flask, render_template, request
-from fastai.vision.image import open_image, image2np
-from PIL import Image as PILImage
-import base64
-from io import BytesIO
+import json
+import os
+import shutil
+import subprocess
+import json
+import sys
+import dill
+import torch
+from pathlib import Path
+from typing import List
 
-app = Flask(__name__)
+CONFIG_DIR = Path.home()/'.servefastai'
+CONFIG_FNAME = 'config.json'
 
-@app.route("/ping")
-def hello(): 
-  return "success"
+class ServeFastAI():
 
-_learner = None
+    DEPLOY_MODES = ["heroku", "gcp", "local"]
 
-@app.route('/')
-def upload():
-  return render_template('upload.html')
+    def __init__(self, deploy_mode, deploy_dir="deploy", model_weights_path=None, output_classes=[], image_size=299, model_arch=None):
+        """
+        
+        """
+        self.deploy_dir = deploy_dir
+        self.model_cfg_name = "model_cfg.json"
+        if deploy_mode in self.DEPLOY_MODES:
+            self.deploy_mode = self.DEPLOY_MODES.index(deploy_mode)
+        else:
+            print("Please choose heroku, gcp or local for deployment")
+            return
 
-def encode(img):
-    img = (image2np(img.data) * 255).astype('uint8')
-    pil_img = PILImage.fromarray(img)
-    buff = BytesIO()
-    pil_img.save(buff, format="JPEG")
-    return base64.b64encode(buff.getvalue()).decode("utf-8")
+        with open(CONFIG_DIR/CONFIG_FNAME) as f:
+            self.config_file_dict = json.load(f)
 
+        base_path = os.path.dirname(os.path.realpath(__file__))
+        response = 'y'
+        if os.path.exists(deploy_dir):
+            response = input("Do you want to override the existing files?(y/n)")
+        else:
+            os.makedirs(deploy_dir)
 
-def _predict_single(fp):
-  img = open_image(fp)
-  pred = img.predict(_learn)
-  idx = pred.argmax()
-  label = _learn.data.classes[idx]
-  img_data = encode(img)
-  return { 'label': label, 'name': fp.filename, 'image': img_data }
+        if response.lower() != 'y':
+            print ("Not Overriding the deploy files")
+            return
 
+        shutil.rmtree(deploy_dir)
+        os.makedirs(deploy_dir)
+        # TODO: Replace os.path with Path()
 
-@app.route('/predict', methods=['POST'])
-def predict():
-  global _learn
-  files = request.files.getlist("files")
-  predictions = map(_predict_single, files)
-  return render_template('predict.html', predictions=predictions)
+        
+        if not os.path.exists(os.path.join(deploy_dir, "templates")):
+            shutil.copytree(os.path.join(base_path, "templates"), os.path.join(deploy_dir, "templates"))
+        # TODO: Add support for gcp heroku
+        shutil.copyfile(os.path.join(base_path,"dockerfiles", "Dockerfile_heroku"), os.path.join(deploy_dir, "Dockerfile"))
+        shutil.copyfile(os.path.join(base_path, "server.py"), os.path.join(deploy_dir, "server.py"))
+        
+        # Export learn model
+        shutil.copyfile(model_weights_path, os.path.join(deploy_dir, "model.pth"))
+        
+        # Save model load configurations
+        model_cfg = {
+            "model_weights_path": "model.pth",
+            "output_classes": output_classes,
+            "image_size": image_size,
+            "model_arch": model_arch
+        }
+        with open(os.path.join(deploy_dir, self.model_cfg_name), "w") as f:
+            f.write(json.dumps(model_cfg))
 
-def serve(learn, port=9999):
-    global _learn
-    _learn = learn
-    app.run(host='0.0.0.0',port=port)
+    def test_local(self):
+       # TODO: Handle exit condition gracefully by forking the process
+       subprocess.call('cd ' + self.deploy_dir + ' && python server.py', shell=True)
+
+    def run_subprocess(self, command):
+        subp = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+        stdout , stderr = subp.communicate()
+        print (stdout, stderr)
+        return stdout.decode("utf-8").strip(), stderr.decode("utf-8").strip()
+
+    def deploy(self, app_name):
+        if self.deploy_mode == 0:
+            self._deploy_heroku(app_name)
+        elif self.deploy_mode == 1:
+            self._deploy_gcp()
+
+    def _deploy_heroku(self, app_name):
+        """
+        """
+        #TODO: Apt get install snapd, Heroku
+        username = config_file_dict["heroku"]["username"]
+        app = app_name
+        is_heroku_login = self.rub_subprocess('heroku auth:token')
+        heroku_login_result = self.run_subprocess('heroku container:login')
+        if heroku_login_result[0].lower() != 'login succeeded':
+            return
+        docker_login_result = self.run_subprocess('docker login --username=' + username +' --password=$(heroku auth:token)     registry.heroku.com')
+               
+        #TODO: check docker login result 
+
+        available_apps_result = self.run_subprocess('heroku apps')
+        
+        if app_name not in available_apps_result[0].split(' ')[2].splitlines():
+            create_app = self.run_subprocess('heroku create ' + app_name)
+
+        heroku_container_push = self.run_subprocess('cd '+ self.deploy_dir +' && heroku container:push web -a ' + app_name)
+        #TODO: Parse Container build results.
+        heroku_container_release = self.run_subprocess('cd '+ self.deploy_dir +' && heroku container:release web -a ' + app_name)
+
+    def _deploy_gcp(self):
+        #TODO: installing gcloud
+        #TODO: the user should login first to the gcloud.
+        
+        google_cloud_login = self.run_subprocess('gcloud auth login --no-launch-browser')
+        
+
+        
+        
+        
+        
+        
