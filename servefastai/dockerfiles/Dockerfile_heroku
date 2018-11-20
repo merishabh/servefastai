@@ -11,7 +11,7 @@ RUN pip install fastai
 RUN pip install flask
 # TODO: Fix flask version
 
-ADD model-weights.pth model-weights.pth
+ADD model.pth model.pth
 
 ADD server.py server.py
 

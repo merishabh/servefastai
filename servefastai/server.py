@@ -1,6 +1,7 @@
 import base64
 import json
 import torch
+from pathlib import Path
 
 from io import BytesIO
 from flask import Flask, render_template, request
@@ -11,7 +12,7 @@ from PIL import Image as PILImage
 
 app = Flask(__name__)
 
-with open('model_cfg.json') as f:
+with open('/home/rishabh_saxena2112/deploy/model_cfg.json') as f:
     model_cfg = json.load(f)
 
 def get_model_from_name(model_name):
