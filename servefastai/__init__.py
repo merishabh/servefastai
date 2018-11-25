@@ -6,9 +6,13 @@ import json
 import sys
 import dill
 import torch
+import time
 from pathlib import Path
 from typing import List
-import googleapiclient.discovery
+from googleapiclient import discovery
+from oauth2client.client import GoogleCredentials
+
+
 
 CONFIG_DIR = Path.home()/'.servefastai'
 CONFIG_FNAME = 'config.json'
@@ -54,6 +58,7 @@ class ServeFastAI():
         shutil.copyfile(os.path.join(base_path,"dockerfiles", "Dockerfile_heroku"), os.path.join(deploy_dir, "Dockerfile"))
         shutil.copyfile(os.path.join(base_path, "server.py"), os.path.join(deploy_dir, "server.py"))
         shutil.copyfile(os.path.join(base_path, "install_docker.sh"), os.path.join(deploy_dir, "install_docker.sh"))
+        shutil.copyfile(os.path.join(base_path, "run_image.sh"), os.path.join(deploy_dir, "run_image.sh"))
         # Export learn model
         shutil.copyfile(model_weights_path, os.path.join(deploy_dir, "model.pth"))
         
@@ -74,7 +79,6 @@ class ServeFastAI():
     def run_subprocess(self, command):
         subp = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
         stdout , stderr = subp.communicate()
-        print (stdout, stderr)
         return stdout.decode("utf-8").strip(), stderr.decode("utf-8").strip()
 
     def deploy(self):
@@ -89,10 +93,14 @@ class ServeFastAI():
         #TODO: Apt get install snapd, Heroku
         username = self.config_file_dict["heroku"]["username"]
         app_name = self.config_file_dict["heroku"]["app-name"]
+        print ("Fetching the auth token")
         is_heroku_login = self.run_subprocess('heroku auth:token')
+        print ("Logging into Heroku")
         heroku_login_result = self.run_subprocess('heroku container:login')
         if heroku_login_result[0].lower() != 'login succeeded':
+            print (heroku_login_result[1])
             return
+        print ("Logging into Docker")
         docker_login_result = self.run_subprocess('docker login --username=' + username +' --password=$(heroku auth:token)     registry.heroku.com')
                
         #TODO: check docker login result 
@@ -100,10 +108,14 @@ class ServeFastAI():
         available_apps_result = self.run_subprocess('heroku apps')
         
         if app_name not in available_apps_result[0].split(' ')[2].splitlines():
+            print ("Creating the app")
             create_app = self.run_subprocess('heroku create ' + app_name)
-
+        else:
+            print ("App is already present")
+        print ("Pushing the image to heroku repository")
         heroku_container_push = self.run_subprocess('cd '+ self.deploy_dir +' && heroku container:push web -a ' + app_name)
         #TODO: Parse Container build results.
+        print ("Releasing the image")
         heroku_container_release = self.run_subprocess('cd '+ self.deploy_dir +' && heroku container:release web -a ' + app_name)
     
     def _list_instances(self, compute, project, zone):
@@ -170,15 +182,12 @@ class ServeFastAI():
         zone=zone,
         body=config).execute()
         
-    def dbg(self):
-        import pdb
-        pdb.set_trace()
-        
     def _deploy_gcp(self):
-        #TODO: installing gcloud
+        #TODO: Readme for installing gcloud
         #TODO: Readme for asking user to login
-        #TODO: Delete Instance
-        compute = googleapiclient.discovery.build('compute', 'v1')
+        #TODO: Delete Instance (to confirm)
+        credentials = GoogleCredentials.get_application_default()
+        compute = discovery.build('compute', 'v1', credentials=credentials)
         project_id = self.config_file_dict["gcp"]["project_id"]
         image_project = self.config_file_dict["gcp"]["image_project"]
         image_family = self.config_file_dict["gcp"]["image_family"]
@@ -186,33 +195,43 @@ class ServeFastAI():
         instance_name = self.config_file_dict["gcp"]["instance_name"]
         machine_type = "custom-" + self.config_file_dict["gcp"]["number_of_cpus"] + "-" + self.config_file_dict["gcp"]["amount_of_memory_per_cpu(MB)"]
         instances_items = self._list_instances(compute, project_id, zone)
-        #TODO: Add check for running.
-        instance_list = [i['name'] for i in instances_items]
-        if instance_name not in instance_list:
-            instance = self._create_instance(compute, project_id, image_project, image_family, zone, instance_name, machine_type)
-            self._wait_for_operation(compute, project, zone, operation['name'])
-#                 print ("New Instance is successfully created")
-#             except Exception as e:
-#                 print (str(e))
+        
+        instance_list = [{"name": i["name"], "status": i["status"]} for i in instances_items]
+        is_instance_exists = False
+        instance_status = ''
+        for instance in instance_list:
+            if instance['name'] == instance_name:
+                is_instance_exists = True
+                instance_status = instance['status']
+                break
+                
+        if not is_instance_exists:
+            operation = self._create_instance(compute, project_id, image_project, image_family, zone, instance_name, machine_type)
+            self._wait_for_operation(compute, project_id, zone, operation['name'])
         else:
-            #TODO: Instance is not down should be checked.
-            print ("Instance is already up and running. Moving forward to Deployment")
-#         instance_ssh = self.run_subprocess("gcloud compute ssh %s --zone %s" % (instance_name, zone))
+            if instance_status != 'RUNNING':
+                print ("Instance is not running. Restarting the instance")
+                request = compute.instances().start(project=project_id, zone=zone, instance=instance_name)
+                response = request.execute()
+                self._wait_for_operation(compute, project_id, zone, response['name'])
+            else:
+                print ("Instance is already up and running. Moving forward to Deployment")
+               
         print("Copying Files from one instance to another")
-        copyDeploy_to_instance = self.run_subprocess("gcloud compute scp --recurse %s root@%s:%s --zone %s" %(self.deploy_dir, instance_name, Path.home(), zone))
-        print("Installing docker on the remote machine")
-#         install_docker = self.run_subprocess('gcloud compute ssh %s --zone %s --command "cd %s/deploy && sudo chmod +x install_docker.sh && ./install_docker.sh"' % (instance_name, zone, Path.home()))
+        copy_deploy_to_instance = self.run_subprocess("gcloud compute scp --recurse %s root@%s:%s --zone %s" %(self.deploy_dir, instance_name, Path.home(), zone))
+        if copy_deploy_to_instance[0]:
+            print (copy_deploy_to_instance[0])
+        print("Installing docker on the remote machine if it is not already installed")
+        install_docker = self.run_subprocess('gcloud compute ssh %s --zone %s --command "cd %s/deploy && sudo chmod +x install_docker.sh && ./install_docker.sh"' % (instance_name, zone, Path.home()))
+        if install_docker[0]:
+            print ("hey " + install_docker[0])
         print("Building image on the remote machine")
-        build_image = self.run_subprocess('gcloud compute ssh %s --zone %s --command "cd %s/deploy && sudo docker build -t servefastai-image ."' % (instance_name, zone, Path.home()))
+        build_image = self.run_subprocess('gcloud compute ssh %s --zone %s --command "cd %s/deploy && docker build --build-arg arg_port=5000 -t servefastai-image ."' % (instance_name, zone, Path.home()))
+        if build_image[0]:
+            print ("hey " + build_image[0])
         print("Running image on the remote machine")
-        run_container = self.run_subprocess('gcloud compute ssh %s --zone %s --command "cd %s/deploy && sudo docker build -t servefastai-image ."' % (instance_name, zone, Path.home()))
-
-        
-        
-        
-
-        
-        
-        
-        
-        
+        run_container = self.run_subprocess('gcloud compute ssh %s --zone %s --command "cd %s/deploy && sudo chmod +x run_image.sh && ./run_image.sh"' % (instance_name, zone, Path.home()))
+        if run_container[1]:
+            print ("Error: " + run_container[1])
+        else:
+            print ("Output: " + run_container[0])
