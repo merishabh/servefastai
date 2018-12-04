@@ -17,10 +17,6 @@ ADD model_cfg.json model_cfg.json
 
 ADD server.py server.py
 
-ARG arg_port
-
-ENV PORT=$arg_port
-
 EXPOSE $PORT
 
 # Start the server
