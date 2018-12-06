@@ -39,12 +39,12 @@ servefastai_object = ServeFastAI(deploy_mode="gcp", deploy_dir="deploy", model_w
 
 Above Code will create the ServeFastAI object(``servefastai_object``) which has below attributes:
 
-deploy_mode - "gcp"
-deploy_dir - Local "deploy" directory will be created with this name. This folder will be used for deploying your model on the instance. 
-model_weights_path - full path of your model pth
-output_classes - output classes
-image_size - image size
-model_arch - resnet18 or resnet36
+deploy_mode - "gcp"  
+deploy_dir - Local "deploy" directory will be created with this name. This folder will be used for deploying your model on the instance.  
+model_weights_path - full path of your model pth  
+output_classes - output classes  
+image_size - image size  
+model_arch - resnet18 or resnet36  
 
 ---
 
