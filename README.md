@@ -4,6 +4,12 @@ Serve FastAI models and get a web-based UI to test them out with a single line o
 
 ![screenshot](https://i.imgur.com/TzZQZUs.jpg)
 
+Table of contents
+1. [Deploying on GCP(Google Cloud Platform)](#gcp)
+2. [Deploying on Heroku](#heroku)
+
+
+<a name="gcp"></a> 
 
 # Deploying on GCP(Google Cloud Platform):
 
