@@ -1,6 +1,6 @@
 #!/bin/bash
 
-if [ -z "$(docker ps -q)" ]
+if [ -z "$(docker ps -a -q)" ]
 then
       echo "Starting the Container"     
 else

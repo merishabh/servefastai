@@ -67,9 +67,9 @@ class ServeFastAI():
             cursor.execute('''insert into gcp_instances_info (project_id, instance_name, zone, num_of_cpus,  amount_of_memory_per_cpu) values (?, ?, ?, ?, ?)''', (self.project_id, self.instance_name, self.zone, self.num_of_cpus, self.amount_of_memory_per_cpu))
         elif self.deploy_mode == 0:
             print ("Creating Heroku App")
-            cursor.execute("CREATE TABLE IF NOT EXISTS heroku_apps_info (id INTEGER PRIMARY KEY AUTOINCREMENT, app_name text")
+            cursor.execute("CREATE TABLE IF NOT EXISTS heroku_apps_info (id INTEGER PRIMARY KEY AUTOINCREMENT, app_name text);")
             self.app_name = input("Name of the app?")
-            cursor.execute('''insert into gcp_instances_info (app_name) values (?)''', (self.app_name))
+            cursor.execute('''insert into heroku_apps_info (app_name) values (?)''', (self.app_name,))
         try:
             is_deployed = self.deploy()
             if is_deployed:
@@ -87,12 +87,11 @@ class ServeFastAI():
         self.list_gcp_instances()
         while True:
             deploy_id = int(input("Choose the instance id from the above list"))
-            cursor.execute("select project_id, instance_name, zone, num_of_cpus, amount_of_memory_per_cpu from gcp_instances_info where id = ?", (deploy_id,))
+            cursor.execute("select project_id, instance_name, zone, num_of_cpus, amount_of_memory_per_cpu from heroku_apps_info where id = ?", (deploy_id,))
             row = cursor.fetchone()
             if row:
                 break
             print ("No instance found for the corresponding id. Please choose the correct id from the above list.")
-        print (row)
         self.project_id, self.instance_name, self.zone, self.num_of_cpus, self.amount_of_memory_per_cpu = row
         gcp_deployment.stop_gcp_instance(self.project_id, self.instance_name, self.zone)
         if conn:
@@ -118,8 +117,13 @@ class ServeFastAI():
             rows = cursor.fetchall()
             for row in rows:
                 print(row)
+            return True
         except Exception as err:
             print ("No data found in GCP Instances Info Table.")
+            return False
+        finally:
+            if conn:
+                conn.close()
      
     def list_heroku_apps(self):
         conn = common_helper.get_sqlite_connection()
@@ -130,21 +134,21 @@ class ServeFastAI():
             rows = cursor.fetchall()
             for row in rows:
                 print(row)
+            return True
         except Exception as err:
             print ("No data found in Heroku Apps Info Table.")
+            return False
+        finally:
+            if conn:
+                conn.close()
             
     def reDeploy(self):
         conn = common_helper.get_sqlite_connection()
         cursor = conn.cursor()
-        deploy_mode = input("Deploy Mode?(gcp/heroku/local)")
-        if deploy_mode in self.DEPLOY_MODES:
-            self.deploy_mode = self.DEPLOY_MODES.index(deploy_mode)
-        else:
-            print("Please choose heroku, gcp or local for deployment")
-            return
         
         if self.deploy_mode == 1:
-            self.list_gcp_instances()
+            if not self.list_gcp_instances():
+                return
             while True:
                 deploy_id = int(input("Choose the instance id from the above list"))
                 cursor.execute("select project_id, instance_name, zone, num_of_cpus, amount_of_memory_per_cpu from gcp_instances_info where id = ?", (deploy_id,))
@@ -152,16 +156,34 @@ class ServeFastAI():
                 if row:
                     break
                 print ("No instance found for the corresponding id. Please choose the correct id from the above list.")
-            print (row)
             self.project_id, self.instance_name, self.zone, self.num_of_cpus, self.amount_of_memory_per_cpu = row
+        elif self.deploy_mode == 0:
+            if not self.list_heroku_apps():
+                return
+            while True:
+                deploy_id = int(input("Choose the app id from the above list"))
+                cursor.execute("select app_name from heroku_apps_info where id = ?", (deploy_id,))
+                row = cursor.fetchone()
+                if row:
+                    break
+                print ("No app found for the corresponding id. Please choose the correct id from the above list.")
+            self.app_name = row[0]
+        try:
             is_deployed = self.deploy()
             if is_deployed:
                 print ("Deployment has completed SuccessFully!!!")
+        except Exception as e:
+                print (e)
+        finally:
+            if conn:
+                conn.close()
+                
             
     def deploy(self):
         if self.deploy_mode == 0:
-            heroku_deployment.deploy_heroku()
+            deployment_status = heroku_deployment.deploy_heroku(self.app_name, self.deploy_dir)
         elif self.deploy_mode == 1:
-            return gcp_deployment.deploy_gcp(deploy_dir = self.deploy_dir , project_id = self.project_id, instance_name = self.instance_name, zone = self.zone, num_of_cpus = self.num_of_cpus, amount_of_memory_per_cpu = self.amount_of_memory_per_cpu)
+            deployment_status = gcp_deployment.deploy_gcp(deploy_dir = self.deploy_dir , project_id = self.project_id, instance_name = self.instance_name, zone = self.zone, num_of_cpus = self.num_of_cpus, amount_of_memory_per_cpu = self.amount_of_memory_per_cpu)
+        return deployment_status
 
    

@@ -87,7 +87,7 @@ def _stop_instance(compute, project, zone, instance):
     return request
 
 def _start_instance(compute, project, zone, instance):
-    request = compute.instances().start(project=project_id, zone=zone, instance=instance_name)
+    request = compute.instances().start(project=project, zone=zone, instance=instance)
     return request
 
 def deploying_gcp_instance(deploy_dir, instance_name, zone):

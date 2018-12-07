@@ -6,13 +6,14 @@ import sqlite3
 import subprocess
 
 CONFIG_DIR = Path.home()/'.servefastai'
-CONFIG_FNAME = 'config.json'
 DB_NAME = 'servefast.db'
 HOST_ADD_WARNING = 'Failed to add the host to the list of known hosts (' + os.path.join(Path.home(), '.ssh/google_compute_known_hosts') + ').'
 
 DEPLOY_MODES = ["heroku", "gcp", "local"]
  
 def get_sqlite_connection():
+    if not os.path.exists(CONFIG_DIR):
+        os.makedirs(CONFIG_DIR)
     conn = sqlite3.connect(os.path.join(CONFIG_DIR, DB_NAME))
     return conn
     
@@ -20,8 +21,6 @@ def _code_deploy(deploy_mode, deploy_dir="deploy", model_weights_path=None, outp
     """
     
     """
-    with open(CONFIG_DIR/CONFIG_FNAME) as f:
-        config_file_dict = json.load(f)
 
     base_path = os.path.dirname(os.path.realpath(__file__))
     response = 'y'

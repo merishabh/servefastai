@@ -17,6 +17,10 @@ ADD model_cfg.json model_cfg.json
 
 ADD server.py server.py
 
+RUN mkdir -p templates
+
+ADD templates templates/
+
 EXPOSE $PORT
 
 # Start the server
