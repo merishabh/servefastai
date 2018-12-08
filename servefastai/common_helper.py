@@ -60,7 +60,6 @@ def _code_deploy(deploy_mode, deploy_dir="deploy", model_weights_path=None, outp
     }
     with open(os.path.join(deploy_dir, "model_cfg.json"), "w") as f:
         f.write(json.dumps(model_cfg))
-    print ("Deploy Folder files are overridden")
 
 def run_subprocess(command):
     subp = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)

@@ -181,12 +181,22 @@ servefastai_object = ServeFastAI(deploy_mode="heroku", deploy_dir="deploy", mode
 
 Above Code will create the ServeFastAI object(``servefastai_object``) which has below attributes:
 
-`deploy_mode` - "heroku"
-`deploy_dir` - Local "deploy" directory will be created with this name. This folder will be used for deploying your model on the app. 
-`model_weights_path` - full path of your model pth
-`output_classes` - output classes
-`image_size` - image size
-`model_arch` - Specify the correct resnet model, resnet18 or resnet36.
+`deploy_mode` - "heroku"  
+`deploy_dir` - Local "deploy" directory will be created with this name. This folder will be used for deploying your model on the app.  
+`model_weights_path` - full path of your model pth  
+`output_classes` - output classes  
+`image_size` - image size  
+`model_arch` - Specify the correct resnet model, resnet18 or resnet36.  
+
+---
+
+**Creating and Deploying a new Heroku app:**
+
+```
+servefastai_object.create_and_deploy()
+```
+
+Access the server using the https://<your-app-name>.herokuapp.com/ .You will see a form where you can upload one or more images. Upload the images and click submit to view the predictions.
 
 ---
 
@@ -204,6 +214,12 @@ servefastai_object.reDeploy()
 ---
 
 
+**Listing the Heroku apps**
+```
+servefastai_object.list_heroku_apps()
+```
+
+---
 
 
 
