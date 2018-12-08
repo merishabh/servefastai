@@ -127,9 +127,13 @@ servefastai_object.list_gcp_instances()
 servefastai_object.stop_given_gcp_instance()
 ```
 
-<a name=“heroku”></a>
+---
+
+
+<a name="heroku"></a> 
 
 # Deploying on Heroku:
+
 
 **Install Docker CE**
 
@@ -221,17 +225,3 @@ servefastai_object.list_heroku_apps()
 ```
 
 ---
-
-
-
-
-
-
-
-
-
-
-
-
-
-
